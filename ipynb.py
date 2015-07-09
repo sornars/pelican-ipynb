@@ -113,6 +113,8 @@ class IPythonNB(BaseReader):
             for i in soup.findAll("div", {"class" : "input"}):
                 if i.findChildren()[1].find(text='#ignore') is not None:
                     i.extract()
+            for i in soup.findAll("div", {"class" : "prompt"}):
+                i.extract()
         else:
             soup = content
 
