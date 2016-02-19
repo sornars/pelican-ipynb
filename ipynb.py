@@ -15,14 +15,25 @@ from pelican import signals
 from pelican.readers import MarkdownReader, HTMLReader, BaseReader
 
 import IPython
-from IPython.config import Config
-from IPython.nbconvert.exporters import HTMLExporter
-
 try:
-    from IPython.nbconvert.filters.highlight import _pygment_highlight
+    # Jupyter
+    from traitlets.config import Config
+except ImportError:
+    # IPython < 4.0
+    from IPython.config import Config
+try:
+    # Jupyter
+    import nbconvert
+except ImportError:
+    # IPython < 4.0
+    import IPython.nbconvert as nbconvert
+
+from nbconvert.exporters import HTMLExporter
+try:
+    from nbconvert.filters.highlight import _pygment_highlight
 except ImportError:
     # IPython < 2.0
-    from IPython.nbconvert.filters.highlight import _pygments_highlight
+    from nbconvert.filters.highlight import _pygments_highlight
 
 try:
     from bs4 import BeautifulSoup
@@ -82,7 +93,6 @@ class IPythonNB(BaseReader):
         filename = os.path.basename(filepath)
         metadata_filename = filename.split('.')[0] + '.ipynb-meta'
         metadata_filepath = os.path.join(filedir, metadata_filename)
-
         # Load metadata
         if os.path.exists(metadata_filepath):
             # Metadata is on a external file, process using Pelican MD Reader
@@ -99,7 +109,6 @@ class IPythonNB(BaseReader):
                 key = key.lower()
                 metadata[key] = self.process_metadata(key, value)
         metadata['ipython'] = True
-
         # Convert ipython notebook to html
         config = Config({'CSSHTMLHeaderTransformer': {'enabled': True,
                          'highlight_class': '.highlight-ipynb'}})
@@ -109,7 +118,7 @@ class IPythonNB(BaseReader):
         content, info = exporter.from_filename(filepath)
 
         if BeautifulSoup:
-            soup = BeautifulSoup(content, 'html.parser')
+            soup = BeautifulSoup(content)
             for i in soup.findAll("div", {"class" : "input"}):
                 if i.findChildren()[1].find(text='#ignore') is not None:
                     i.extract()
@@ -124,9 +133,10 @@ class IPythonNB(BaseReader):
         parser.feed(content)
         parser.close()
         body = parser.body
-        summary = parser.summary
-
-        metadata['summary'] = summary
+        if ('IPYNB_USE_META_SUMMARY' in self.settings.keys() and \
+          self.settings['IPYNB_USE_META_SUMMARY'] == False) or \
+          'IPYNB_USE_META_SUMMARY' not in self.settings.keys():
+            metadata['summary'] = parser.summary
 
         def filter_css(style_text):
             '''
@@ -141,7 +151,7 @@ class IPythonNB(BaseReader):
                 style_text = style_text[:index]
 
             style_text = re.sub(r'color\:\#0+(;)?', '', style_text)
-            style_text = re.sub(r'\.rendered_html[a-z0-9 ]*\{[a-z0-9:;%.#\-\s\n]+\}', '', style_text)
+            style_text = re.sub(r'\.rendered_html[a-z0-9,._ ]*\{[a-z0-9:;%.#\-\s\n]+\}', '', style_text)
 
             return '<style type=\"text/css\">{0}</style>'.format(style_text)
 
